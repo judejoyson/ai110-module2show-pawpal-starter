@@ -8,7 +8,8 @@ classDiagram
         +list~str~ preferences
         +list~Pet~ pets
         +add_pet(pet: Pet) None
-        +get_pet(name: str) Pet
+        +get_pet(name: str) Optional~Pet~
+        +get_all_tasks() list~tuple[Pet, Task]~
     }
 
     class Pet {
@@ -25,24 +26,25 @@ classDiagram
         +str title
         +int duration_minutes
         +str priority
-        +bool is_recurring
+        +str frequency
         +str preferred_time
+        +bool completed
         +priority_score() int
-        +__repr__() str
+        +mark_complete() None
     }
 
     class Scheduler {
         +Owner owner
         +int start_hour
-        +build_schedule(pet: Pet, available_minutes: int) Schedule
-        -sort_tasks(tasks: list~Task~) list~Task~
+        +build_schedule(available_minutes: Optional~int~) Schedule
+        -sort_tasks(pet_tasks: list~tuple[Pet, Task]~) list~tuple[Pet, Task]~
         -fits_in_time(task: Task, remaining: int) bool
     }
 
     class Schedule {
         +date day
         +list~ScheduledTask~ entries
-        +int total_minutes
+        +total_minutes() int
         +add_entry(entry: ScheduledTask) None
         +explain() str
         +to_display_rows() list~dict~
@@ -50,6 +52,7 @@ classDiagram
 
     class ScheduledTask {
         +Task task
+        +str pet_name
         +time start_time
         +time end_time
         +str reason
@@ -57,8 +60,7 @@ classDiagram
 
     Owner "1" o-- "*" Pet : owns
     Pet "1" o-- "*" Task : has
-    Scheduler ..> Owner : reads preferences
-    Scheduler ..> Pet : schedules tasks for
+    Scheduler --> Owner : reads get_all_tasks()
     Scheduler --> Schedule : produces
     Schedule "1" *-- "*" ScheduledTask : contains
     ScheduledTask --> Task : wraps
