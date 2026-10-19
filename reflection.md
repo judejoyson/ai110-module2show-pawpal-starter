@@ -59,6 +59,8 @@
   - **Implementation**: used agent mode to flesh out the method bodies, then asked how the `Scheduler` should retrieve tasks from the `Owner` (answer: hold an Owner reference and call `get_all_tasks()`, never reach into individual pets).
   - **Polish**: asked for a readable terminal format for the schedule (fixed-width columns instead of printing raw objects) and for drafting the pytest tests.
 - The most helpful prompts were specific ones that attached the actual file and asked one focused question ("review this skeleton for missing relationships"), rather than broad ones like "make this better." Asking "how should X talk to Y" questions was more useful than asking for finished code, because the answer explained the design, not just the syntax.
+- The AI features that were most effective for this project: **agent mode with multi-file access** (the recurrence feature needed coordinated edits to `pawpal_system.py`, `main.py`, the tests, and the UML in one pass — doing that by hand across four files invites inconsistency), **attach-and-review** (having it audit my skeleton and later my conflict algorithm caught real design flaws cheaply), and **test drafting** (it proposed edge cases I hadn't listed, like the exact-budget boundary and malformed "25:99" times).
+- Using separate chat sessions for the planning phases (algorithm brainstorming, test planning) kept each conversation focused on one job: a planning chat produces a *list of options to judge*, while an implementation chat produces *code*. Keeping them apart meant the planning output was a document I could carry over and prune, instead of the assistant immediately implementing its own first idea — the separation forced a decision point where I chose what actually got built.
 
 **b. Judgment and verification**
 
@@ -75,11 +77,19 @@
 
 - What behaviors did you test?
 - Why were these tests important?
+- The suite has 17 tests in `tests/test_pawpal.py`, grouped around the behaviors where a bug would produce a *wrong plan* rather than a cosmetic glitch:
+  - **Scheduling core**: priority order within the time budget, a task exactly equal to the budget (boundary test for `<=` vs `<`), and empty cases (owner with no pets, pet with no tasks) returning an empty schedule instead of crashing.
+  - **Recurrence lifecycle**: daily completion creates a copy due +1 day, weekly +7 days, "once" doesn't recur — and the critical regression guard: after completing a daily task, it appears *zero* times in today's schedule (neither the done copy nor tomorrow's).
+  - **Conflict detection contract**: identical and overlapping preferred times produce exactly one warning per pair; back-to-back tasks are not false positives; malformed times like "8am" are skipped silently, never raised.
+  - **Robustness**: unknown priority strings score 0 instead of crashing; completing a nonexistent title returns `None`.
+- These mattered because most of them encode *decisions*, not just behavior: the exact-fit test pins the `<=` choice, the back-to-back test pins "touching is not overlapping," and the zero-times recurrence test exists specifically because the double-scheduling bug is the easiest one to reintroduce.
 
 **b. Confidence**
 
 - How confident are you that your scheduler works correctly?
 - What edge cases would you test next if you had more time?
+- About 4 out of 5. Everything the demo shows is pinned by a test, the boundaries I know about are covered, and the suite runs in under a tenth of a second so I actually run it after every change.
+- What I'd test next: the **Streamlit layer** (`app.py` is only verified manually — session-state persistence and the mark-complete flow have no automated coverage), **multi-day recurrence chains** (complete a daily task three days in a row and check the due dates don't drift), **duplicate task titles** (the skipped-task display matches by title, so two pets with a task named "Give meds" could confuse the report), and schedules that would **run past midnight** (a 600-minute budget starting at 20:00 wraps the clock).
 
 ---
 
@@ -88,11 +98,14 @@
 **a. What went well**
 
 - What part of this project are you most satisfied with?
+- The separation between data classes and the one logic class. Because `Task`, `Pet`, `Owner`, and `Schedule` only hold state, every new feature — filtering, sorting, recurrence, conflict detection — landed as a method with an obvious home, and none of them required reshaping the data model. The original six-class UML survived the entire build; only details were added. I'm also happy the plan stayed *explainable*: every scheduled slot carries a reason string, and warnings tell the owner exactly which two tasks collide and when.
 
 **b. What you would improve**
 
 - If you had another iteration, what would you improve or redesign?
+- Make the scheduler actually *use* preferred times for placement, not just for warnings — tasks should land near their requested "HH:MM" slot, with the greedy packer filling the gaps. I'd also add persistence (everything currently lives in memory/session state, so a browser refresh loses the pets) and replace title-based task lookup with stable IDs, which would fix the duplicate-title weakness in one move.
 
 **c. Key takeaway**
 
 - What is one important thing you learned about designing systems or working with AI on this project?
+- Being the "lead architect" with a powerful AI assistant means owning three things the AI can't own: **the requirements** (it suggested multi-pet scheduling early and I deferred it until the assignment actually required it — the same suggestion was wrong at one moment and right at another, and only I knew which), **the tradeoffs** (I rejected its faster sort-and-sweep conflict algorithm because at my scale, verifiable beats clever), and **the verification** (nothing it wrote counted as done until I'd run it and checked the output by hand). The AI was fastest at generating code and at critiquing code — but the decisions that shaped the system, and the responsibility for proving it correct, stayed with me. That division of labor is the whole skill: let the AI multiply execution, never delegate judgment.

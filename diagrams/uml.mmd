@@ -9,7 +9,7 @@ classDiagram
         +list~Pet~ pets
         +add_pet(pet: Pet) None
         +get_pet(name: str) Optional~Pet~
-        +get_all_tasks() list~tuple[Pet, Task]~
+        +get_all_tasks(pet_name: Optional~str~, include_completed: bool) list~tuple[Pet, Task]~
     }
 
     class Pet {
@@ -41,8 +41,10 @@ classDiagram
         +int start_hour
         +build_schedule(available_minutes: Optional~int~) Schedule
         +detect_conflicts(day: Optional~date~) list~str~
+        +sort_by_time(tasks: list~Task~) list~Task~
         -sort_tasks(pet_tasks: list~tuple[Pet, Task]~) list~tuple[Pet, Task]~
         -fits_in_time(task: Task, remaining: int) bool
+        -parse_time(hhmm: str, day: date) Optional~datetime~
     }
 
     class Schedule {
@@ -65,6 +67,7 @@ classDiagram
 
     Owner "1" o-- "*" Pet : owns
     Pet "1" o-- "*" Task : has
+    Pet ..> Task : creates next occurrence
     Scheduler --> Owner : reads get_all_tasks()
     Scheduler --> Schedule : produces
     Schedule "1" *-- "*" ScheduledTask : contains

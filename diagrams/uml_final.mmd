@@ -1,0 +1,74 @@
+classDiagram
+    %% PawPal+ final UML — matches pawpal_system.py as implemented.
+    %% (uml.mmd is the working copy that evolved during the build; this is the deliverable snapshot.)
+
+    class Owner {
+        +str name
+        +int available_minutes
+        +list~str~ preferences
+        +list~Pet~ pets
+        +add_pet(pet: Pet) None
+        +get_pet(name: str) Optional~Pet~
+        +get_all_tasks(pet_name: Optional~str~, include_completed: bool) list~tuple[Pet, Task]~
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +int age
+        +list~Task~ tasks
+        +add_task(task: Task) None
+        +remove_task(title: str) None
+        +get_tasks() list~Task~
+        +mark_task_complete(title: str) Optional~Task~
+    }
+
+    class Task {
+        +str title
+        +int duration_minutes
+        +str priority
+        +str frequency
+        +str preferred_time
+        +bool completed
+        +date due_date
+        +priority_score() int
+        +mark_complete() None
+        +next_occurrence() Optional~Task~
+    }
+
+    class Scheduler {
+        +Owner owner
+        +int start_hour
+        +build_schedule(available_minutes: Optional~int~) Schedule
+        +detect_conflicts(day: Optional~date~) list~str~
+        +sort_by_time(tasks: list~Task~) list~Task~
+        -sort_tasks(pet_tasks: list~tuple[Pet, Task]~) list~tuple[Pet, Task]~
+        -fits_in_time(task: Task, remaining: int) bool
+        -parse_time(hhmm: str, day: date) Optional~datetime~
+    }
+
+    class Schedule {
+        +date day
+        +list~ScheduledTask~ entries
+        +list~str~ warnings
+        +total_minutes() int
+        +add_entry(entry: ScheduledTask) None
+        +explain() str
+        +to_display_rows() list~dict~
+    }
+
+    class ScheduledTask {
+        +Task task
+        +str pet_name
+        +time start_time
+        +time end_time
+        +str reason
+    }
+
+    Owner "1" o-- "*" Pet : owns
+    Pet "1" o-- "*" Task : has
+    Pet ..> Task : creates next occurrence
+    Scheduler --> Owner : reads get_all_tasks()
+    Scheduler --> Schedule : produces
+    Schedule "1" *-- "*" ScheduledTask : contains
+    ScheduledTask --> Task : wraps
