@@ -89,7 +89,7 @@
 - How confident are you that your scheduler works correctly?
 - What edge cases would you test next if you had more time?
 - About 4 out of 5. Everything the demo shows is pinned by a test, the boundaries I know about are covered, and the suite runs in under a tenth of a second so I actually run it after every change.
-- What I'd test next: the **Streamlit layer** (`app.py` is only verified manually — session-state persistence and the mark-complete flow have no automated coverage), **multi-day recurrence chains** (complete a daily task three days in a row and check the due dates don't drift), **duplicate task titles** (the skipped-task display matches by title, so two pets with a task named "Give meds" could confuse the report), and schedules that would **run past midnight** (a 600-minute budget starting at 20:00 wraps the clock).
+- What I'd test next: the **Streamlit layer** (`app.py` is only verified manually — session-state persistence and the mark-complete flow have no automated coverage), **multi-day recurrence chains** (complete a daily task three days in a row and check the due dates don't drift), **duplicate task titles** (the skipped-task display matches by title, so two pets with a task named "Give meds" could confuse the report), and schedules that would **run past midnight** 
 
 ---
 
@@ -103,7 +103,7 @@
 **b. What you would improve**
 
 - If you had another iteration, what would you improve or redesign?
-- Make the scheduler actually *use* preferred times for placement, not just for warnings — tasks should land near their requested "HH:MM" slot, with the greedy packer filling the gaps. I'd also add persistence (everything currently lives in memory/session state, so a browser refresh loses the pets) and replace title-based task lookup with stable IDs, which would fix the duplicate-title weakness in one move.
+- Make the scheduler actually *use* preferred times for placement, not just for warnings, with the greedy packer filling the gaps. I'd also add persistence (everything currently lives in memory/session state, so a browser refresh loses the pets) and replace title-based task lookup with stable IDs, which would fix the duplicate-title weakness in one move.
 
 **c. Key takeaway**
 
