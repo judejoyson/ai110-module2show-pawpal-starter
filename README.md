@@ -106,26 +106,38 @@ WARNING - preferred-time conflicts detected:
 
 ## 🧪 Testing PawPal+
 
-```bash
-# Run the full test suite:
-pytest
+Run the suite from the project root:
 
-# Run with coverage:
+```bash
+python -m pytest
+
+# Or with coverage:
 pytest --cov
 ```
 
-Sample test output:
+**What the tests cover** (17 tests in `tests/test_pawpal.py`):
+
+- **Task basics** — completion flips status; adding a task grows the pet's list.
+- **Sorting** — `sort_by_time` returns chronological "HH:MM" order with untimed tasks last.
+- **Scheduling** — priority order is respected within the time budget; a task exactly equal to the budget is scheduled (boundary test); an owner with no pets or a pet with no tasks yields an empty schedule instead of crashing.
+- **Recurrence** — completing a daily/weekly task creates one copy due +1 day / +1 week; "once" tasks don't recur; tomorrow's copy never leaks into today's plan; completing an unknown title safely returns `None`.
+- **Conflict detection** — identical and overlapping preferred times are flagged (exactly one warning per pair, across different pets too); back-to-back tasks are not false positives; malformed times like "8am" are skipped, never raised.
+- **Robustness** — an unknown priority string scores 0 and sorts last instead of crashing.
+
+Output of a successful run:
 
 ```
 ============================= test session starts =============================
 platform win32 -- Python 3.14.3, pytest-9.1.1, pluggy-1.6.0
 rootdir: C:\Users\joyso\ai110-module2show-pawpal-starter
-collected 2 items
+collected 17 items
 
-tests\test_pawpal.py ..                                                  [100%]
+tests\test_pawpal.py .................                                   [100%]
 
-============================== 2 passed in 0.04s ==============================
+============================= 17 passed in 0.05s ==============================
 ```
+
+**Confidence level: ★★★★☆ (4/5).** The scheduling core — priority, budget boundaries, recurrence, and conflict detection — is covered including its edge cases, and every behavior shown in the demo is pinned by a test. One star withheld because the Streamlit layer (`app.py`) is untested — session-state handling and display formatting are only verified manually — and multi-day scenarios (e.g., a weekly task chain over several completions) haven't been exercised.
 
 ## 📐 Smarter Scheduling
 
