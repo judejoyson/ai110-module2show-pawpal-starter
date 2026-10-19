@@ -34,11 +34,16 @@
 
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
 - How did you decide which constraints mattered most?
+- The scheduler considers four constraints: the owner's daily time budget (`available_minutes`), task priority (high > medium > low, with shorter duration breaking ties), completion status plus due date (done tasks and tomorrow's auto-created recurring copies are excluded), and preferred times ("HH:MM" strings, used for conflict warnings).
+- I ranked them by consequence: running out of time and missing a high-priority task (like meds) is worse than doing a task at a non-ideal hour. So the time budget and priority are hard constraints that decide *what* gets scheduled, while preferred times are soft — they generate warnings but never remove a task from the plan.
 
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
+- The main tradeoff: **the scheduler treats preferred times as advisory, not binding.** It packs tasks greedily by priority from the start hour, back-to-back, and separately runs `detect_conflicts()` on the *requested* times — so two tasks requested at overlapping times produce a warning message, but the plan still builds and nothing is auto-moved or dropped. The schedule the user gets can place an "evening walk" at 8:15 AM.
+- This is reasonable because for a busy pet owner, the critical guarantee is "everything important fits in my available time" — a warning keeps the human in the loop to resolve timing themselves, whereas an auto-resolver could silently drop or move a meds dose, which is a worse failure. It also keeps the algorithm simple enough to test and explain (`reason` strings stay honest).
+- A related, smaller tradeoff came from an AI simplification review of `detect_conflicts()`: I accepted replacing my manual index-slicing pair loop with `itertools.combinations` (more Pythonic *and* more readable), but rejected its O(n log n) sort-and-sweep optimization. The sweep is faster in theory, but at ~a dozen tasks the O(n²) pairwise check is instant, and the sweep's running-max-end subtlety is easy to get wrong — I chose the version I could verify over the clever one.
 
 ---
 

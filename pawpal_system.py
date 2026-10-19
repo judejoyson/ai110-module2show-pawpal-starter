@@ -4,8 +4,9 @@ Data classes (Task, Pet, Owner, ScheduledTask, Schedule) hold state;
 Scheduler is the logic layer that turns an Owner's tasks into a daily plan.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta
+from itertools import combinations
 
 # Single source of truth for priority ordering (higher = more important).
 PRIORITY_SCORES = {"low": 1, "medium": 2, "high": 3}
@@ -19,8 +20,9 @@ class Task:
     duration_minutes: int
     priority: str  # "low" | "medium" | "high"
     frequency: str = "daily"  # "once" | "daily" | "weekly"
-    preferred_time: str = ""  # e.g., "morning", "evening", or "" for no preference
+    preferred_time: str = ""  # "HH:MM" like "08:30", or "" for no preference
     completed: bool = False
+    due_date: date = field(default_factory=date.today)
 
     def priority_score(self) -> int:
         """Return a numeric score for sorting, looked up in PRIORITY_SCORES.
@@ -32,6 +34,18 @@ class Task:
     def mark_complete(self) -> None:
         """Mark this task as done so the scheduler skips it."""
         self.completed = True
+
+    def next_occurrence(self) -> "Task | None":
+        """Return a fresh copy due at the next occurrence, or None for one-off tasks.
+
+        date + timedelta rolls over months and years correctly
+        (e.g., Jan 31 + 1 day = Feb 1), unlike manual day arithmetic.
+        """
+        intervals = {"daily": timedelta(days=1), "weekly": timedelta(weeks=1)}
+        interval = intervals.get(self.frequency)
+        if interval is None:  # "once" (or unknown): nothing to repeat
+            return None
+        return replace(self, completed=False, due_date=self.due_date + interval)
 
 
 @dataclass
@@ -58,6 +72,21 @@ class Pet:
         """Return this pet's tasks."""
         return list(self.tasks)
 
+    def mark_task_complete(self, title: str) -> "Task | None":
+        """Complete the first pending task with this title; auto-create its next occurrence.
+
+        Returns the newly created occurrence for daily/weekly tasks,
+        or None when the task was one-off (or no match was found).
+        """
+        for task in self.tasks:
+            if task.title.lower() == title.lower() and not task.completed:
+                task.mark_complete()
+                next_task = task.next_occurrence()
+                if next_task is not None:
+                    self.add_task(next_task)
+                return next_task
+        return None
+
 
 @dataclass
 class Owner:
@@ -79,13 +108,20 @@ class Owner:
                 return pet
         return None
 
-    def get_all_tasks(self) -> list[tuple[Pet, Task]]:
-        """Return every pet's tasks together as (pet, task) pairs.
+    def get_all_tasks(
+        self, pet_name: str | None = None, include_completed: bool = True
+    ) -> list[tuple[Pet, Task]]:
+        """Return every pet's tasks as (pet, task) pairs, optionally filtered.
 
-        The pairing keeps pet attribution, so the scheduler can plan across
-        all pets at once and still say which pet each task belongs to.
+        pet_name limits results to one pet (case-insensitive);
+        include_completed=False drops tasks already marked done.
         """
-        return [(pet, task) for pet in self.pets for task in pet.tasks]
+        pairs = [(pet, task) for pet in self.pets for task in pet.tasks]
+        if pet_name is not None:
+            pairs = [(p, t) for p, t in pairs if p.name.lower() == pet_name.lower()]
+        if not include_completed:
+            pairs = [(p, t) for p, t in pairs if not t.completed]
+        return pairs
 
 
 @dataclass
@@ -105,6 +141,7 @@ class Schedule:
 
     day: date = field(default_factory=date.today)
     entries: list[ScheduledTask] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def total_minutes(self) -> int:
@@ -156,10 +193,16 @@ class Scheduler:
         Defaults to the owner's available_minutes when no override is given.
         """
         budget = available_minutes if available_minutes is not None else self.owner.available_minutes
-        pending = [(pet, task) for pet, task in self.owner.get_all_tasks() if not task.completed]
+        schedule = Schedule()
+        # Only tasks due today or overdue — a recurring task completed today
+        # spawns a copy due tomorrow, which must not appear in today's plan.
+        pending = [
+            (pet, task)
+            for pet, task in self.owner.get_all_tasks(include_completed=False)
+            if task.due_date <= schedule.day
+        ]
         ordered = self._sort_tasks(pending)
 
-        schedule = Schedule()
         remaining = budget
         cursor = datetime.combine(schedule.day, time(hour=self.start_hour))
 
@@ -183,7 +226,54 @@ class Scheduler:
             cursor = end
             remaining -= task.duration_minutes
 
+        schedule.warnings.extend(self.detect_conflicts(schedule.day))
         return schedule
+
+    def detect_conflicts(self, day: date | None = None) -> list[str]:
+        """Return warning strings for tasks whose preferred time slots overlap.
+
+        Lightweight by design: conflicts never raise and never block the plan —
+        the schedule still builds, and the caller decides how to show warnings.
+        Tasks without a parseable "HH:MM" preferred_time are simply skipped.
+        """
+        day = day or date.today()
+        timed: list[tuple[str, Task, datetime, datetime]] = []
+        for pet, task in self.owner.get_all_tasks(include_completed=False):
+            if task.due_date > day or not task.preferred_time:
+                continue
+            start = self._parse_time(task.preferred_time, day)
+            if start is None:
+                continue
+            timed.append(
+                (pet.name, task, start, start + timedelta(minutes=task.duration_minutes))
+            )
+
+        warnings = []
+        for (pet_a, task_a, start_a, end_a), (pet_b, task_b, start_b, end_b) in combinations(
+            timed, 2
+        ):
+            if start_a < end_b and start_b < end_a:  # standard interval-overlap test
+                warnings.append(
+                    f"'{task_a.title}' ({pet_a}, {start_a:%H:%M}-{end_a:%H:%M}) overlaps "
+                    f"'{task_b.title}' ({pet_b}, {start_b:%H:%M}-{end_b:%H:%M})"
+                )
+        return warnings
+
+    @staticmethod
+    def _parse_time(hhmm: str, day: date) -> "datetime | None":
+        """Parse an "HH:MM" string into a datetime on the given day; None if malformed."""
+        try:
+            return datetime.combine(day, datetime.strptime(hhmm, "%H:%M").time())
+        except ValueError:
+            return None
+
+    def sort_by_time(self, tasks: list[Task]) -> list[Task]:
+        """Sort tasks by their "HH:MM" preferred_time, earliest first.
+
+        Zero-padded "HH:MM" strings sort chronologically as plain strings,
+        so the lambda key needs no parsing. Untimed tasks ("") sort last.
+        """
+        return sorted(tasks, key=lambda task: task.preferred_time or "99:99")
 
     def _sort_tasks(self, pet_tasks: list[tuple[Pet, Task]]) -> list[tuple[Pet, Task]]:
         """Sort by priority (high first), then shorter tasks first as tie-breaker."""

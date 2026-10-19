@@ -58,26 +58,50 @@ How they work together: the UI (or `main.py`) builds an `Owner` with `Pet`s and 
 
 ## 🖥️ Sample Output
 
-Terminal output from running `python main.py` (two pets sharing one 90-minute budget):
+Terminal output from running `python main.py` (two pets sharing one 90-minute budget, showing sorting, filtering, recurrence, and conflict detection):
 
 ```
-Today's Schedule for Jordan (2026-10-18)
-Budget: 90 min | Scheduled: 85 min
+All tasks in the order they were added:
+  18:00    Evening walk          30 min  high    [pending]
+  07:30    Morning walk          30 min  high    [pending]
+  anytime  Brush coat            15 min  low     [pending]
+  15:30    Play session          25 min  medium  [pending]
+  08:00    Give meds             10 min  high    [pending]
+  07:45    Breakfast             15 min  high    [pending]
+  09:00    Clean litter box      10 min  medium  [done]
+
+Sorted by time (sort_by_time):
+  07:30    Morning walk          30 min  high    [pending]
+  07:45    Breakfast             15 min  high    [pending]
+  08:00    Give meds             10 min  high    [pending]
+  09:00    Clean litter box      10 min  medium  [done]
+  15:30    Play session          25 min  medium  [pending]
+  18:00    Evening walk          30 min  high    [pending]
+  anytime  Brush coat            15 min  low     [pending]
+
+Filtered: Luna's tasks only:
+  15:30    Play session          25 min  medium  [pending]
+  08:00    Give meds             10 min  high    [pending]
+  07:45    Breakfast             15 min  high    [pending]
+  09:00    Clean litter box      10 min  medium  [done]
+
+Marking Luna's daily 'Give meds' complete...
+  Auto-created next occurrence: due 2026-10-20 (daily)
+
+Today's Schedule for Jordan (2026-10-19)
+Budget: 90 min | Scheduled: 90 min
 ------------------------------------------------------------------------
 Time          Pet     Task                  Min  Priority
 ------------------------------------------------------------------------
-08:00-08:10   Luna    Give meds              10  high
-08:10-08:40   Mochi   Morning walk           30  high
-08:40-09:00   Mochi   Training practice      20  medium
-09:00-09:25   Luna    Play session           25  medium
+08:00-08:15   Luna    Breakfast              15  high
+08:15-08:45   Mochi   Evening walk           30  high
+08:45-09:15   Mochi   Morning walk           30  high
+09:15-09:30   Mochi   Brush coat             15  low
 ------------------------------------------------------------------------
-Skipped (not enough time): Brush coat
+Skipped (not enough time): Play session
 
-Why this plan:
-  * Give meds: high priority for Luna, fits in the 90 min remaining
-  * Morning walk: high priority for Mochi, fits in the 80 min remaining
-  * Training practice: medium priority for Mochi, fits in the 50 min remaining
-  * Play session: medium priority for Luna, fits in the 30 min remaining
+WARNING - preferred-time conflicts detected:
+  ! 'Morning walk' (Mochi, 07:30-08:00) overlaps 'Breakfast' (Luna, 07:45-08:00)
 ```
 
 ## 🧪 Testing PawPal+
@@ -105,14 +129,16 @@ tests\test_pawpal.py ..                                                  [100%]
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
+Four logic upgrades beyond the basic greedy scheduler, each with the method that implements it:
 
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | `Scheduler._sort_tasks`, `Task.priority_score` | Highest priority first; shorter duration breaks ties |
-| Filtering | `Scheduler._fits_in_time`, `build_schedule` | Completed tasks skipped; tasks that don't fit the remaining budget are dropped |
-| Conflict handling | `Scheduler.build_schedule` | Sequential time cursor — each task starts when the previous ends, so slots never overlap |
-| Recurring tasks | `Task.frequency` | Field in place ("once"/"daily"/"weekly"); scheduler logic for it is future work |
+| Sorting | `Scheduler.sort_by_time()`, `Scheduler._sort_tasks()` | `sort_by_time` orders tasks by their `"HH:MM"` preferred time using a `lambda` key (zero-padded strings sort chronologically; untimed tasks sort last via a `"99:99"` sentinel). `_sort_tasks` orders the actual plan by priority, shorter duration breaking ties. |
+| Filtering | `Owner.get_all_tasks(pet_name=..., include_completed=...)` | Optional keyword filters: one pet's tasks (case-insensitive) and/or hide completed tasks. The scheduler itself uses `include_completed=False` plus a due-date check. |
+| Conflict detection | `Scheduler.detect_conflicts()` | Pairwise interval-overlap test (`itertools.combinations`) on requested `"HH:MM"` slots. Returns warning strings on `Schedule.warnings` instead of crashing — conflicts never block the plan. Back-to-back tasks are not flagged. |
+| Recurring tasks | `Task.next_occurrence()`, `Pet.mark_task_complete()` | Completing a daily/weekly task auto-creates a fresh copy due `+1 day` / `+1 week` (via `timedelta`, so month/year rollovers are handled). `build_schedule` only includes tasks with `due_date <= today`, so tomorrow's copy never leaks into today's plan. |
+
+All four behaviors are demonstrated in `main.py` and covered by `tests/test_pawpal.py` (7 tests).
 
 ## 📸 Demo Walkthrough
 
